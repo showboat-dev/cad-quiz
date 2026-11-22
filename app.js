@@ -315,8 +315,13 @@
     }
 
     return '' +
-      '<article class="card">' +
-        '<div class="meta"><span>第 ' + pos + ' / ' + total + ' 题</span>' + tag + '</div>' +
+      '<article class="card" id="questionCard">' +
+        '<div class="meta">' +
+          '<span>第 ' + pos + ' / ' + total + ' 题</span>' +
+          '<span class="meta-actions">' + tag +
+            '<button class="btn shot" type="button" data-act="shot">截图问 AI</button>' +
+          '</span>' +
+        '</div>' +
         '<p class="qtext">' + esc(q.q) + '</p>' +
         '<ul class="opts">' + opts + '</ul>' +
         submitRow + result + extra +
@@ -336,6 +341,128 @@
     if (state.view === 'home') renderHome(); else renderQuiz();
   }
 
+  function canvasToBlob(canvas) {
+    return new Promise(function (resolve) {
+      canvas.toBlob(function (blob) { resolve(blob); }, 'image/png');
+    });
+  }
+
+  function shotFileName() {
+    var bank = currentBank();
+    var q = currentQuestion();
+    return (bank ? bank.id : 'cad') + '-' + (q ? q.id : 'question') + '.png';
+  }
+
+  var shotKeyHandler = null;
+
+  function closeShotModal() {
+    var modal = document.getElementById('shotModal');
+    if (modal) modal.remove();
+    if (shotKeyHandler) {
+      document.removeEventListener('keydown', shotKeyHandler);
+      shotKeyHandler = null;
+    }
+  }
+
+  function showShotModal(canvas) {
+    closeShotModal();
+    var url = canvas.toDataURL('image/png');
+    var modal = document.createElement('div');
+    modal.id = 'shotModal';
+    modal.className = 'shot-modal';
+    modal.innerHTML = '' +
+      '<div class="shot-dialog" role="dialog" aria-modal="true" aria-label="题目截图">' +
+        '<div class="shot-head">' +
+          '<strong>题目截图</strong>' +
+          '<button class="link" type="button" data-shot="close">关闭</button>' +
+        '</div>' +
+        '<p class="shot-tip" data-shot="tip">把这张图粘贴到对话里，就可以问 AI。</p>' +
+        '<img class="shot-preview" alt="当前题目截图">' +
+        '<div class="shot-actions">' +
+          '<button class="btn primary" type="button" data-shot="copy">复制图片</button>' +
+          '<button class="btn" type="button" data-shot="save">下载 PNG</button>' +
+        '</div>' +
+      '</div>';
+    modal.querySelector('.shot-preview').src = url;
+    document.body.appendChild(modal);
+
+    function setTip(text) {
+      var tip = modal.querySelector('[data-shot="tip"]');
+      if (tip) tip.textContent = text;
+    }
+
+    function savePng() {
+      var a = document.createElement('a');
+      a.href = url;
+      a.download = shotFileName();
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTip('已开始下载。也可以在图片上右键复制，再粘贴给 AI。');
+    }
+
+    function copyPng() {
+      if (!navigator.clipboard || !window.ClipboardItem) {
+        setTip('这个环境不能直接复制图片。请下载 PNG，或在图片上右键复制。');
+        return;
+      }
+      // ClipboardItem 必须在点击当刻创建，图片数据可以稍后就绪
+      var item = new ClipboardItem({ 'image/png': canvasToBlob(canvas) });
+      navigator.clipboard.write([item]).then(function () {
+        setTip('已复制到剪贴板，到对话框里粘贴即可。');
+      }).catch(function () {
+        setTip('这个环境不能直接复制图片。请下载 PNG，或在图片上右键复制。');
+      });
+    }
+
+    modal.addEventListener('click', function (e) {
+      if (e.target === modal) return closeShotModal();
+      var hit = e.target.closest('[data-shot]');
+      if (!hit) return;
+      var act = hit.getAttribute('data-shot');
+      if (act === 'close') closeShotModal();
+      else if (act === 'save') savePng();
+      else if (act === 'copy') copyPng();
+    });
+
+    shotKeyHandler = function (e) {
+      if (e.key === 'Escape') closeShotModal();
+    };
+    document.addEventListener('keydown', shotKeyHandler);
+  }
+
+  function captureQuestion() {
+    var card = document.getElementById('questionCard');
+    var btn = card && card.querySelector('[data-act="shot"]');
+    if (!card || !window.html2canvas) {
+      window.alert('截图组件还没加载好，请刷新页面后再试。');
+      return;
+    }
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = '截图中…';
+    }
+    window.html2canvas(card, {
+      backgroundColor: '#ffffff',
+      scale: 2,
+      logging: false,
+      onclone: function (doc) {
+        var shot = doc.querySelector('[data-act="shot"]');
+        if (shot) shot.remove();
+      }
+    }).then(function (canvas) {
+      showShotModal(canvas);
+    }).catch(function () {
+      window.alert('截图失败，请重试。');
+    }).then(function () {
+      var again = document.querySelector('#questionCard [data-act="shot"]');
+      if (again) {
+        again.disabled = false;
+        again.textContent = '截图问 AI';
+      }
+    });
+  }
+
   /* ---------- 事件 ---------- */
 
   app.addEventListener('click', function (e) {
@@ -352,6 +479,7 @@
     else if (act === 'retry') retry();
     else if (act === 'reset') resetProgress();
     else if (act === 'jump') jumpTo(document.getElementById('jumpInput').value);
+    else if (act === 'shot') captureQuestion();
   });
 
   app.addEventListener('change', function (e) {
@@ -363,6 +491,7 @@
   });
 
   document.addEventListener('keydown', function (e) {
+    if (document.getElementById('shotModal')) return;
     if (state.view !== 'quiz') return;
     if (e.target && (e.target.tagName === 'INPUT' || e.altKey || e.ctrlKey || e.metaKey)) return;
     var key = e.key;
