@@ -10,6 +10,7 @@ from parse_pdf import parse as parse_pdf      # noqa: E402
 
 DL = 'C:/Users/EZO2SZH/Downloads'
 OUT = os.path.join(os.path.dirname(__file__), '..', 'data', 'banks.js')
+TRANSLATIONS = os.path.join(os.path.dirname(__file__), '..', 'data', 'translations.json')
 
 
 def to_items(prefix, qs):
@@ -30,6 +31,23 @@ def to_items(prefix, qs):
     return items
 
 
+def add_translations(banks):
+    if not os.path.exists(TRANSLATIONS):
+        return
+    with open(TRANSLATIONS, encoding='utf-8') as f:
+        translations = json.load(f)
+    for bank in banks:
+        for q in bank['questions']:
+            translated = translations.get(q['id'])
+            if not translated:
+                continue
+            q['qZh'] = translated.get('qZh', '')
+            if translated.get('notesZh'):
+                q['notesZh'] = translated['notesZh']
+            for option in q['options']:
+                option['zh'] = translated.get('o' + option['k'], '')
+
+
 def main():
     excel = to_items('x', parse_excel(f'{DL}/CAD 题库 122.xlsx'))
     pdf = to_items('p', parse_pdf(f'{DL}/CAD 题库 151.pdf'))
@@ -37,6 +55,7 @@ def main():
         {'id': 'excel', 'name': 'CAD 题库 122', 'source': 'Excel', 'questions': excel},
         {'id': 'pdf', 'name': 'CAD 题库 151', 'source': 'PDF', 'questions': pdf},
     ]
+    add_translations(banks)
     js = '// 由 scripts/build_data.py 自动生成\nwindow.BANKS = ' + json.dumps(banks, ensure_ascii=False, indent=1) + ';\n'
     os.makedirs(os.path.dirname(OUT), exist_ok=True)
     with open(OUT, 'w', encoding='utf-8') as f:

@@ -10,6 +10,7 @@
     bankId: null,
     filter: 'all',     // all | todo | wrong
     shuffle: false,
+    language: 'both',  // both | zh | en
     order: [],         // 当前列表中的题目下标（相对 bank.questions）
     pos: 0,            // 当前在 order 中的位置
     picked: [],        // 当前题已选字母
@@ -240,6 +241,11 @@
     var tools = '' +
       '<div class="tools">' +
         '<div class="seg">' + seg + '</div>' +
+        '<div class="language-switch" role="group" aria-label="题目语言">' +
+          '<button type="button" data-lang="both" aria-pressed="' + (state.language === 'both') + '" class="' + (state.language === 'both' ? 'on' : '') + '">中英</button>' +
+          '<button type="button" data-lang="zh" aria-pressed="' + (state.language === 'zh') + '" class="' + (state.language === 'zh' ? 'on' : '') + '">中文</button>' +
+          '<button type="button" data-lang="en" aria-pressed="' + (state.language === 'en') + '" class="' + (state.language === 'en' ? 'on' : '') + '">EN</button>' +
+        '</div>' +
         '<label class="toggle"><input type="checkbox" data-act="shuffle"' + (state.shuffle ? ' checked' : '') + '> 随机顺序</label>' +
         '<div class="jump">' +
           '<input type="number" min="1" max="' + Math.max(total, 1) + '" id="jumpInput" placeholder="题号">' +
@@ -256,7 +262,13 @@
       body = renderCard(q, total) + renderPager(total);
     }
 
-    app.innerHTML = '<div class="wrap">' + header + tools + body + '</div>';
+    app.innerHTML = '<div class="wrap" data-language="' + state.language + '">' + header + tools + body + '</div>';
+  }
+
+  function setLanguage(language) {
+    if (['both', 'zh', 'en'].indexOf(language) < 0) return;
+    state.language = language;
+    render();
   }
 
   function renderCard(q, total) {
@@ -275,7 +287,7 @@
         '<li><button class="' + cls.join(' ') + '" data-opt="' + esc(o.k) + '"' +
           (state.revealed ? ' disabled' : '') + '>' +
           '<span class="k">' + esc(o.k) + '</span>' +
-          '<span class="t">' + esc(o.t) + '</span>' +
+          '<span class="t"><span class="english" lang="en">' + esc(o.t) + '</span><span class="chinese" lang="zh-CN">' + esc(o.zh || '') + '</span></span>' +
         '</button></li>';
     }).join('');
 
@@ -304,7 +316,7 @@
     var extra = '';
     if (state.revealed) {
       if (q.notes) {
-        extra += '<div class="notes"><span class="label">解析 / 说明</span>' + linkify(q.notes) + '</div>';
+        extra += '<div class="notes"><span class="label">解析 / 说明</span><span class="english" lang="en">' + linkify(q.notes) + '</span><span class="chinese" lang="zh-CN">' + linkify(q.notesZh || '') + '</span></div>';
       }
       if (q.ref && q.ref.length) {
         extra += '<div class="notes"><span class="label">参考链接</span><ul class="refs">' +
@@ -322,7 +334,7 @@
             '<button class="btn shot" type="button" data-act="shot">截图问 AI</button>' +
           '</span>' +
         '</div>' +
-        '<p class="qtext">' + esc(q.q) + '</p>' +
+        '<p class="qtext"><span class="english" lang="en">' + esc(q.q) + '</span><span class="chinese" lang="zh-CN">' + esc(q.qZh || '') + '</span></p>' +
         '<ul class="opts">' + opts + '</ul>' +
         submitRow + result + extra +
       '</article>';
@@ -466,11 +478,12 @@
   /* ---------- 事件 ---------- */
 
   app.addEventListener('click', function (e) {
-    var t = e.target.closest('[data-bank],[data-filter],[data-act],[data-opt]');
+    var t = e.target.closest('[data-bank],[data-filter],[data-act],[data-opt],[data-lang]');
     if (!t) return;
     if (t.hasAttribute('data-bank')) return openBank(t.getAttribute('data-bank'));
     if (t.hasAttribute('data-filter')) return setFilter(t.getAttribute('data-filter'));
     if (t.hasAttribute('data-opt')) return pick(t.getAttribute('data-opt'));
+    if (t.hasAttribute('data-lang')) return setLanguage(t.getAttribute('data-lang'));
     var act = t.getAttribute('data-act');
     if (act === 'home') goHome();
     else if (act === 'prev') go(-1);
